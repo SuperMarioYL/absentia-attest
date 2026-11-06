@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Test
+        run: pytest -q
+
+      - name: CLI smoke on the fixture archive
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/absentia-smoke"
+          absentia index fixtures/seed_archive --out "$out"
+          absentia check "道路监控摄像头采购" --archive fixtures/seed_archive --out "$out" \
+            | tee "$RUNNER_TEMP/check.txt"
+          grep -q "PRESENT" "$RUNNER_TEMP/check.txt"
+          absentia verify "$out/attestation.json"

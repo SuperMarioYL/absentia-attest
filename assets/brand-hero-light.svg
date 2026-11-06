@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-labelledby="heroTitle heroDesc">
+  <title id="heroTitle">absentia — 为「没有」出具带覆盖度的缺席凭证</title>
+  <desc id="heroDesc">左侧是 absentia 品牌名与一句话定位；右侧是一页台账卡片，21 个分块分数全部落在阈值 τ 0.62 之下，标注 INCONCLUSIVE、lexical only，底部给出 manifest 与 core 摘要。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="0.55" stop-color="#eef5fa"/>
+      <stop offset="1" stop-color="#e3eef6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#0b7285" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#0b7285" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#b4560c" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#b4560c" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#c6d8e6" stroke-width="1" opacity="0.7"/>
+    </pattern>
+    <style>
+      .brand { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK SC", monospace; }
+      .glow { animation: breathe 5.5s ease-in-out infinite; }
+      .glow2 { animation: breathe 7s ease-in-out infinite; animation-delay: 1.4s; }
+      @keyframes breathe { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.95; } }
+      .march { stroke-dasharray: 5 7; animation: march 10s linear infinite; }
+      @keyframes march { to { stroke-dashoffset: -144; } }
+      .dot { animation: shimmer 4.2s ease-in-out infinite; }
+      .dot:nth-of-type(3n) { animation-delay: 1.1s; }
+      .dot:nth-of-type(3n+1) { animation-delay: 2.1s; }
+      @keyframes shimmer { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        .glow, .glow2, .march, .dot { animation: none; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1200" height="320" fill="url(#bg)"/>
+  <rect width="1200" height="320" fill="url(#grid)"/>
+  <ellipse class="glow" cx="640" cy="170" rx="330" ry="190" fill="url(#glow)"/>
+  <ellipse class="glow2" cx="980" cy="250" rx="240" ry="150" fill="url(#glow2)"/>
+
+  <g class="glow" fill="#0b7285">
+    <circle cx="560" cy="248" r="2.2"/>
+    <circle cx="598" cy="222" r="1.8"/>
+    <circle cx="628" cy="260" r="2.6"/>
+    <circle cx="664" cy="206" r="1.7"/>
+    <circle cx="690" cy="238" r="2.2"/>
+    <circle cx="718" cy="196" r="1.9"/>
+    <circle cx="742" cy="258" r="2.4"/>
+  </g>
+  <path class="march" d="M556 250 L676 214 L742 182" fill="none" stroke="#4c9bb0" stroke-width="1.2" opacity="0.8"/>
+
+  <g class="brand">
+    <text x="72" y="76" class="mono" font-size="12" letter-spacing="3.2" fill="#0b7285">COVERAGE-BOUNDED ABSENCE ATTESTATION</text>
+    <text x="68" y="164" font-size="102" font-weight="700" letter-spacing="-1.5" fill="#0b1f2e">absentia</text>
+    <rect x="72" y="184" width="136" height="3" rx="1.5" fill="#0b7285"/>
+    <text x="72" y="226" font-size="23" fill="#334b5c">模型说「没有」时，交出一份能被别人重算的凭证。</text>
+    <text x="72" y="256" font-size="16" letter-spacing="0.6" fill="#5b7385">多口径穷尽 · 覆盖度可算 · 第三方可复算</text>
+    <text x="72" y="296" class="mono" font-size="13" fill="#6a8397">7 docs · 7 pages · 21 chunks · 4 variants · 84 comparisons</text>
+  </g>
+
+  <g>
+    <rect x="760" y="42" width="368" height="236" rx="14" fill="#ffffff" stroke="#b7cddd" stroke-width="1.2"/>
+    <rect x="760" y="42" width="368" height="34" rx="14" fill="#e8f2f8"/>
+    <rect x="760" y="62" width="368" height="14" fill="#e8f2f8"/>
+    <text x="784" y="64" class="mono" font-size="11" letter-spacing="2" fill="#0b7285">ABSENTIA / LEDGER</text>
+    <text x="1104" y="64" class="mono" font-size="10" text-anchor="end" fill="#5b7385">v0.1.0</text>
+
+    <text x="784" y="106" class="brand" font-size="16" fill="#0b1f2e">Flock 摄像头采购</text>
+    <text x="784" y="128" class="mono" font-size="11" fill="#a3540c">INCONCLUSIVE · lexical only</text>
+
+    <line x1="784" y1="196" x2="1104" y2="196" stroke="#c3d5e2" stroke-width="1"/>
+    <line class="march" x1="784" y1="168" x2="1104" y2="168" stroke="#b4560c" stroke-width="1.2" opacity="0.95"/>
+    <text x="1104" y="162" class="mono" font-size="10" text-anchor="end" fill="#a3540c">τ 0.62</text>
+    <text x="784" y="162" class="mono" font-size="10" fill="#5b7385">top1 0.25</text>
+
+    <g fill="#0b7285">
+      <circle class="dot" cx="792" cy="214" r="2.4"/>
+      <circle class="dot" cx="807" cy="218" r="2.4"/>
+      <circle class="dot" cx="822" cy="212" r="2.4"/>
+      <circle class="dot" cx="837" cy="219" r="2.4"/>
+      <circle class="dot" cx="852" cy="215" r="2.4"/>
+      <circle class="dot" cx="867" cy="221" r="2.4"/>
+      <circle class="dot" cx="882" cy="213" r="2.4"/>
+      <circle class="dot" cx="897" cy="218" r="2.4"/>
+      <circle class="dot" cx="912" cy="216" r="2.4"/>
+      <circle class="dot" cx="927" cy="220" r="2.4"/>
+      <circle class="dot" cx="942" cy="214" r="2.4"/>
+      <circle class="dot" cx="957" cy="219" r="2.4"/>
+      <circle class="dot" cx="972" cy="217" r="2.4"/>
+      <circle class="dot" cx="987" cy="221" r="2.4"/>
+      <circle class="dot" cx="1002" cy="213" r="2.4"/>
+      <circle class="dot" cx="1017" cy="218" r="2.4"/>
+      <circle class="dot" cx="1032" cy="216" r="2.4"/>
+      <circle class="dot" cx="1047" cy="220" r="2.4"/>
+      <circle class="dot" cx="1062" cy="214" r="2.4"/>
+      <circle class="dot" cx="1077" cy="219" r="2.4"/>
+      <circle class="dot" cx="1092" cy="217" r="2.4"/>
+    </g>
+
+    <text x="784" y="252" class="mono" font-size="9.5" fill="#6a8397">manifest b59e497d…cf09e</text>
+    <text x="784" y="266" class="mono" font-size="9.5" fill="#6a8397">core 181e3e90…58343</text>
+  </g>
+</svg>

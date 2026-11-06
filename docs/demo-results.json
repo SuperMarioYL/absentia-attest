@@ -1,0 +1,146 @@
+{
+  "schema": "absentia.demo-results/1",
+  "tool": {
+    "name": "absentia-attest",
+    "command": "absentia",
+    "version": "0.1.0"
+  },
+  "recorded_at": "2026-11-06T00:47:16Z",
+  "environment": {
+    "python": "3.12.13",
+    "platform": "macOS arm64",
+    "embedding_endpoint": null,
+    "note": "The recording host had no local embedding endpoint. absentia therefore ran the lexical channel only and refused ABSENT_BOUNDED, reporting INCONCLUSIVE instead. This is product behaviour, not a recording failure."
+  },
+  "fixture": {
+    "path": "fixtures/seed_archive",
+    "documents": 7,
+    "pages": 7,
+    "parsed_pages": 7,
+    "chunks": 21,
+    "excluded_documents": 0,
+    "manifest_sha256": "b59e497de998c0501208749c2e812712b86d59c8bf0ac4d5a4d972608fcff09e"
+  },
+  "commands": [
+    {
+      "argv": ["absentia", "index", "fixtures/seed_archive"],
+      "stdout": [
+        "7 文档 / 7 页（已解析 7）/ 21 段 / 0 个文件未解析",
+        "清单  .absentia/manifest.json",
+        "索引  .absentia/index.sqlite",
+        "manifest_sha256  b59e497de998c0501208749c2e812712b86d59c8bf0ac4d5a4d972608fcff09e"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": ["absentia", "check", "Flock 摄像头采购", "--archive", "fixtures/seed_archive"],
+      "stdout": [
+        "7 页中 7 页已解析并逐段打分，4 种口径改写 × 21 段 = 84 次比对，最高相似度 0.25 < 阈值 0.62，判定：无法判定；未解析 0 页已列出",
+        "INCONCLUSIVE（无法判定） 最高分 0.25 / τ 0.62 · 84 次比对 · 仅词法",
+        "凭证  .absentia/attestation.json",
+        "台账  .absentia/ledger.md",
+        "core_sha256  181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343"
+      ],
+      "stderr": [
+        "注意：未配置嵌入端点，本次只跑了词法通道，因此不出具 ABSENT_BOUNDED。配置 --endpoint 后可复算语义通道。"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": ["absentia", "verify", ".absentia/attestation.json"],
+      "stdout": [
+        "AGREES  判定 INCONCLUSIVE → 复算 INCONCLUSIVE",
+        "claimed core_sha256     181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343",
+        "recomputed core_sha256  181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": ["absentia", "check", "道路监控摄像头采购", "--archive", "fixtures/seed_archive", "--out", ".absentia-present"],
+      "stdout": [
+        "7 页中 7 页已解析并逐段打分，4 种口径改写 × 21 段 = 84 次比对，最高相似度 1.00 ≥ 阈值 0.62，判定：命中（有）；未解析 0 页已列出",
+        "PRESENT（命中（有）） 最高分 1.00 / τ 0.62 · 84 次比对 · 仅词法",
+        "凭证  .absentia-present/attestation.json",
+        "台账  .absentia-present/ledger.md",
+        "core_sha256  95b4e0734dd926f861c7c027283bef62db4b6840ae057f1f304ecb5d2fd90856"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": ["absentia", "verify", ".absentia-present/attestation.json"],
+      "stdout": [
+        "AGREES  判定 PRESENT → 复算 PRESENT",
+        "claimed core_sha256     95b4e0734dd926f861c7c027283bef62db4b6840ae057f1f304ecb5d2fd90856",
+        "recomputed core_sha256  95b4e0734dd926f861c7c027283bef62db4b6840ae057f1f304ecb5d2fd90856"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "runs": {
+    "absence_claim": {
+      "claim": "Flock 摄像头采购",
+      "verdict": "INCONCLUSIVE",
+      "verdict_reason": "lexical_only",
+      "top1_score": 0.251183,
+      "tau": 0.62,
+      "calibration_recall": 0.86,
+      "lexical_only": true,
+      "embedding_model": null,
+      "variants": [
+        "Flock 摄像头采购",
+        "Flock 攝像頭採購",
+        "Flock 视频监控设备采购",
+        "Flock 摄像头购置"
+      ],
+      "matrix": {
+        "chunks": 21,
+        "variants": 4,
+        "comparisons": 84,
+        "sha256": "77ddaf88786a4824d6631ce139943115b8ac63504b6c9c0061f435df381b8181"
+      },
+      "core_sha256": "181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343",
+      "ledger": "docs/demo/ledger-card.md",
+      "why_not_absent_bounded": "No embedding endpoint was configured, so the semantic channel covered zero chunks. The tool refuses to call a literal miss an absence and reports INCONCLUSIVE with bound.lexical_only=true."
+    },
+    "present_claim": {
+      "claim": "道路监控摄像头采购",
+      "verdict": "PRESENT",
+      "verdict_reason": "score_at_or_above_tau",
+      "top1_score": 1.0,
+      "tau": 0.62,
+      "lexical_only": true,
+      "citation": {
+        "path": "procurement_ledger.md",
+        "page": 1,
+        "chunk": "7bf5aadd79:p0001:c000",
+        "excerpt": "| 2021-06-18 | 镇综合行政执法队 | 采购 道路监控摄像头 12 台及配套立杆 | 43,200 |"
+      },
+      "core_sha256": "95b4e0734dd926f861c7c027283bef62db4b6840ae057f1f304ecb5d2fd90856"
+    }
+  },
+  "verify": {
+    "absence_run": {
+      "status": "AGREES",
+      "agreement": true,
+      "recomputed_verdict": "INCONCLUSIVE",
+      "differences": []
+    },
+    "present_run": {
+      "status": "AGREES",
+      "agreement": true,
+      "recomputed_verdict": "PRESENT",
+      "differences": []
+    }
+  },
+  "tests": {
+    "command": "pytest -q",
+    "passed": 29,
+    "python": "3.12.13"
+  },
+  "limitations": [
+    "The fixture archive is 7 text documents (7 logical pages, 21 chunks); it is not a benchmark.",
+    "ABSENT_BOUNDED for the absence claim is covered by the test suite with a stand-in embedder, not by this recording. On a host with bge-m3 behind a local OpenAI-compatible endpoint the same command exercises the semantic channel.",
+    "calibration_recall is a fixed table shipped with the package, not a measurement on this corpus.",
+    "Parsing covers text-layer PDF, DOCX, TXT and MD only; scanned pages are excluded with reason no_text_layer."
+  ]
+}

@@ -344,26 +344,93 @@ def run_check(request: CheckRequest) -> dict:
 # --------------------------------------------------------------------------- #
 
 
-def _compare(claimed_core: dict, recomputed_core: dict) -> list[str]:
-    differences: list[str] = []
-    pairs = (
-        ("manifest_sha256", claimed_core["corpus"]["manifest_sha256"],
-         recomputed_core["corpus"]["manifest_sha256"]),
-        ("matrix.sha256", claimed_core["matrix"]["sha256"], recomputed_core["matrix"]["sha256"]),
-        ("verdict.label", claimed_core["verdict"]["label"], recomputed_core["verdict"]["label"]),
-        ("verdict.top1_score", claimed_core["verdict"]["top1_score"],
-         recomputed_core["verdict"]["top1_score"]),
-    )
-    for name, claimed, recomputed in pairs:
-        if claimed != recomputed:
-            differences.append(f"{name}: claimed={claimed!r} recomputed={recomputed!r}")
-    if claimed_core["corpus"]["pages"] != recomputed_core["corpus"]["pages"]:
-        differences.append(
-            "corpus.pages: claimed={} recomputed={}".format(
-                claimed_core["corpus"]["pages"], recomputed_core["corpus"]["pages"]
+class AttestationError(Exception):
+    """The file is not a readable, structurally valid attestation."""
+
+
+def _field(mapping: dict, *path: str):
+    value = mapping
+    travelled: list[str] = []
+    for key in path:
+        travelled.append(key)
+        if not isinstance(value, dict) or key not in value:
+            raise AttestationError(
+                "不是可复算的 absentia 凭证：缺少字段 " + ".".join(travelled)
             )
-        )
-    return differences
+        value = value[key]
+    return value
+
+
+def _load_envelope(path: Path) -> tuple[dict, dict, str]:
+    import json
+
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise AttestationError(f"无法读取凭证 {path}：{exc}") from exc
+    try:
+        envelope = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise AttestationError(
+            f"不是合法的 JSON（第 {exc.lineno} 行第 {exc.colno} 列）：{exc.msg}"
+        ) from exc
+    if not isinstance(envelope, dict):
+        raise AttestationError("不是 absentia 凭证：顶层不是 JSON 对象")
+    core = envelope.get("core")
+    if not isinstance(core, dict):
+        raise AttestationError("不是 absentia 凭证：缺少 core 对象")
+    claimed = envelope.get("core_sha256")
+    if not isinstance(claimed, str) or not claimed:
+        raise AttestationError("不是 absentia 凭证：缺少 core_sha256")
+    return envelope, core, claimed
+
+
+def _core_digest(core: dict) -> str:
+    try:
+        body = canonical_json(core)
+    except (TypeError, ValueError) as exc:
+        raise AttestationError(f"凭证 core 无法规范化：{exc}") from exc
+    return sha256_hex(body.encode("utf-8"))
+
+
+def _diff_values(claimed, recomputed, prefix: str = "") -> list[str]:
+    """Every leaf that differs, so a forged field can never hide in the noise."""
+    if isinstance(claimed, dict) and isinstance(recomputed, dict):
+        differences: list[str] = []
+        for key in sorted(set(claimed) | set(recomputed)):
+            path = f"{prefix}.{key}" if prefix else key
+            if key not in claimed:
+                differences.append(f"{path}: missing in claimed")
+            elif key not in recomputed:
+                differences.append(f"{path}: missing in recomputed")
+            else:
+                differences.extend(_diff_values(claimed[key], recomputed[key], path))
+        return differences
+    if isinstance(claimed, list) and isinstance(recomputed, list):
+        differences = []
+        if len(claimed) != len(recomputed):
+            differences.append(
+                f"{prefix}: length claimed={len(claimed)} recomputed={len(recomputed)}"
+            )
+        for index, (left, right) in enumerate(zip(claimed, recomputed)):
+            differences.extend(_diff_values(left, right, f"{prefix}[{index}]"))
+        return differences
+    if claimed != recomputed:
+        return [f"{prefix}: claimed={claimed!r} recomputed={recomputed!r}"]
+    return []
+
+
+def _is_loopback_endpoint(endpoint: str) -> bool:
+    """True for the local-endpoint shapes the product actually documents.
+
+    ``verify`` reads the endpoint out of a file that may be untrusted, and it
+    would hand that host the archive's text. Only loopback is contacted
+    automatically; a human can opt in to anything else with ``--endpoint``.
+    """
+    from urllib.parse import urlparse
+
+    host = (urlparse(endpoint).hostname or "").strip("[]").lower()
+    return host == "localhost" or host == "::1" or host.startswith("127.")
 
 
 def run_verify(
@@ -376,48 +443,105 @@ def run_verify(
 ) -> dict:
     """Recompute the attestation from the archive and report agreement.
 
+    The whole ``core`` body is compared, not a hand-picked subset, and the
+    recomputed digest is compared with the claimed one. A body edited and then
+    re-hashed therefore still disagrees.
+
     Nothing is written to the archive: ingestion happens in a temporary
     directory so a verifier cannot alter what they are verifying.
     """
-    import json
     import tempfile
 
-    envelope = json.loads(attestation_path.read_text(encoding="utf-8"))
-    core = envelope["core"]
+    envelope, core, claimed_digest = _load_envelope(attestation_path)
+    body_digest = _core_digest(core)
 
-    claimed_digest = envelope.get("core_sha256", "")
-    actual_digest = sha256_hex(canonical_json(core).encode("utf-8"))
+    verdict_block = core.get("verdict")
     report: dict = {
         "schema": "absentia.verification/1",
         "attestation": str(attestation_path),
         "claimed_core_sha256": claimed_digest,
         "recomputed_core_sha256": None,
         "agreement": False,
+        "status": "DISAGREES",
         "differences": [],
-        "claimed_verdict": core["verdict"]["label"],
+        "claimed_verdict": (
+            verdict_block.get("label") if isinstance(verdict_block, dict) else None
+        ),
         "recomputed_verdict": None,
     }
-    if claimed_digest != actual_digest:
-        report["differences"].append("envelope: core_sha256 does not match the body it covers")
+    if claimed_digest != body_digest:
+        report["differences"].append(
+            "envelope: core_sha256 does not match the body it covers"
+        )
         return report
 
-    target_archive = archive or Path(core["corpus"]["archive"])
+    claim_text = _field(core, "claim", "text")
+    archive_label = _field(core, "corpus", "archive")
+    claimed_tau = _field(core, "bound", "tau")
+    if not isinstance(claim_text, str) or not claim_text.strip():
+        raise AttestationError("不是可复算的 absentia 凭证：claim.text 必须是非空字符串")
+    if not isinstance(archive_label, str) or not archive_label:
+        raise AttestationError("不是可复算的 absentia 凭证：corpus.archive 必须是非空字符串")
+    if isinstance(claimed_tau, bool) or not isinstance(claimed_tau, (int, float)):
+        raise AttestationError("不是可复算的 absentia 凭证：bound.tau 必须是数字")
+
+    bound = core.get("bound") if isinstance(core.get("bound"), dict) else {}
+    claimed_embed = bound.get("embedding_model")
+    claimed_lexical_only = bool(bound.get("lexical_only"))
+
+    auxiliary = envelope.get("auxiliary")
+    invocation = auxiliary.get("invocation") if isinstance(auxiliary, dict) else None
+    invocation = invocation if isinstance(invocation, dict) else {}
+
+    # The attestation records how it was produced; reproduce that invocation
+    # instead of silently dropping the semantic channel. An explicit flag still
+    # wins, then a loopback recorded value, then the environment.
+    blocked_recorded_endpoint: str | None = None
+    if endpoint is not None:
+        resolved_endpoint = endpoint
+    else:
+        recorded_endpoint = invocation.get("endpoint")
+        recorded_endpoint = (
+            recorded_endpoint
+            if isinstance(recorded_endpoint, str) and recorded_endpoint
+            else None
+        )
+        if recorded_endpoint and not _is_loopback_endpoint(recorded_endpoint):
+            blocked_recorded_endpoint = recorded_endpoint
+            recorded_endpoint = None
+        resolved_endpoint = recorded_endpoint or os.environ.get("ABSENTIA_ENDPOINT") or None
+
+    if embed_model is not None:
+        resolved_embed = embed_model
+    elif isinstance(claimed_embed, str) and claimed_embed:
+        resolved_embed = claimed_embed
+    else:
+        recorded_embed = invocation.get("embed_model")
+        resolved_embed = (
+            recorded_embed
+            if isinstance(recorded_embed, str) and recorded_embed
+            else "bge-m3"
+        )
+
+    request_tau = claimed_tau if tau is None else tau
+
+    target_archive = archive or Path(archive_label)
     if not target_archive.is_dir():
         raise FileNotFoundError(f"archive not found: {target_archive}")
-
-    request_tau = core["bound"]["tau"] if tau is None else tau
-    resolved_endpoint = endpoint if endpoint is not None else os.environ.get("ABSENTIA_ENDPOINT") or None
-    resolved_embed = embed_model or core["bound"]["embedding_model"] or "bge-m3"
 
     with tempfile.TemporaryDirectory(prefix="absentia-verify-") as tmp:
         out_dir = Path(tmp)
         ing = ingest.run_index(target_archive, out_dir)
         db_path = out_dir / INDEX_NAME
-        variants = generate_variants(core["claim"]["text"])
+        variants = generate_variants(claim_text)
         outcome = run_scan(
             db_path,
             variants,
-            ScanConfig(tau=request_tau, embedding_model=resolved_embed, endpoint=resolved_endpoint),
+            ScanConfig(
+                tau=request_tau,
+                embedding_model=resolved_embed,
+                endpoint=resolved_endpoint,
+            ),
             chunk_texts=[(chunk.key, chunk.text) for chunk in ing.chunks],
         )
         verdict = decide(
@@ -427,12 +551,10 @@ def run_verify(
             ing.totals["parsed_pages"],
             outcome.lexical_only,
         )
-        # Keep the claimed archive string so the recomputed core is comparable
-        # even when the verifier mounted the archive somewhere else.
         recomputed_core = build_core(
             CheckRequest(
-                claim=core["claim"]["text"],
-                archive=Path(core["corpus"]["archive"]),
+                claim=claim_text,
+                archive=Path(archive_label),
                 out_dir=out_dir,
                 tau=request_tau,
                 endpoint=resolved_endpoint,
@@ -443,15 +565,45 @@ def run_verify(
             verdict,
         )
 
-    report["recomputed_core_sha256"] = sha256_hex(
-        canonical_json(recomputed_core).encode("utf-8")
-    )
+    # The archive path is a label, not content: keep the claimed spelling so a
+    # verifier can mount the corpus elsewhere without a spurious difference.
+    recomputed_core["corpus"]["archive"] = archive_label
+
+    recomputed_digest = _core_digest(recomputed_core)
+    report["recomputed_core_sha256"] = recomputed_digest
     report["recomputed_verdict"] = verdict["label"]
-    report["differences"] = _compare(core, recomputed_core)
-    report["agreement"] = not report["differences"]
-    if recomputed_core["bound"]["lexical_only"] and core["bound"]["embedding_model"]:
-        report["note"] = (
-            "verify ran without an embedding endpoint; pass --endpoint (or set "
-            "ABSENTIA_ENDPOINT) to reproduce the semantic channel"
+    report["endpoint"] = resolved_endpoint
+
+    if not claimed_lexical_only and recomputed_core["bound"]["lexical_only"]:
+        # The claim used the semantic channel and we could not reproduce it.
+        # That is a verification precondition, not evidence of tampering.
+        error = outcome.embedding_error or "no_endpoint"
+        report["status"] = "INCONCLUSIVE"
+        report["embedding_error"] = error
+        if blocked_recorded_endpoint:
+            report["blocked_recorded_endpoint"] = blocked_recorded_endpoint
+        pieces = [f"复算未能使用语义通道（{error}）"]
+        if blocked_recorded_endpoint:
+            pieces.append(
+                f"凭证记录的嵌入端点 {blocked_recorded_endpoint} 不是本机地址，"
+                "verify 不会主动把档案内容发往该主机；如确认可信，请显式传 --endpoint"
+            )
+        elif resolved_endpoint:
+            pieces.append(f"嵌入端点 {resolved_endpoint} 当前不可用")
+        else:
+            pieces.append("凭证没有记录可用的嵌入端点")
+        pieces.append(f"凭证声明的 embedding_model 为 {claimed_embed!r}")
+        pieces.append("这是复核条件不足，不是凭证不一致")
+        report["note"] = "；".join(pieces) + "。"
+        return report
+
+    differences = _diff_values(core, recomputed_core)
+    if recomputed_digest != claimed_digest:
+        differences.insert(
+            0,
+            f"core_sha256: claimed={claimed_digest} recomputed={recomputed_digest}",
         )
+    report["differences"] = differences
+    report["agreement"] = not differences
+    report["status"] = "AGREES" if not differences else "DISAGREES"
     return report

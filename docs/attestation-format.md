@@ -127,6 +127,10 @@ FTS5 trigram 命中、2 字中文词走 `LIKE` 回退、还是完全没命中。
 }
 ```
 
+`embedding_error` 表示**端点配置了但调用失败**，与「没有配置端点」是两件事：
+CLI 的提示行和 `ledger.md` 的「嵌入端点」行会分别写出异常类别，不会把连接失败
+说成未配置。
+
 `calibration_recall` 是**对阈值的陈述**，不是对本次档案的承诺：表内每个 τ 对应一个历史
 召回估计，插值到不高于 τ 的最近档。凭证里写它，是为了让读者知道"τ=0.62 意味着什么"，
 而不是让读者以为这次真的测了召回率——私有档案没有标注集，这一点无法回避。
@@ -228,17 +232,28 @@ score       = coverage(c) × gate(c)
 absentia verify .absentia/attestation.json [--archive DIR] [--tau T] [--endpoint URL]
 ```
 
-1. 先验信封：重算 `core` 的摘要，与 `core_sha256` 比对。不等即判"文件被改过"，
+1. 读取并校验文件结构。不是合法 JSON、不是 absentia 凭证或缺少必要字段时，
+   打印一条错误并退出码 2，不抛 traceback。
+2. 先验信封：重算 `core` 的摘要，与 `core_sha256` 比对。不等即判"文件被改过"，
    直接返回，不再往下跑（改过判定的凭证不该得到"其它字段还好"的第二种说法）。
-2. 在**临时目录**重建索引（不写被审档案，也不覆盖原凭证）。
-3. 用凭证里的 `claim.text`、`bound.tau`、`bound.embedding_model` 重跑同一套流程。
-4. 逐项比对：`manifest_sha256`、`matrix.sha256`、`verdict.label`、`verdict.top1_score`、
-   `corpus.pages`。
-5. 全部相等 → `AGREES`（退出码 0）；否则 `DISAGREES`（退出码 3），并列差异。
+3. 在**临时目录**重建索引（不写被审档案，也不覆盖原凭证）。
+4. 从 `auxiliary.invocation` 复现当时的调用：用记录的 `endpoint` 与
+   `embed_model`（命令行显式参数优先）。为免把档案内容发往未知主机，
+   只自动连接 `localhost` / `127.0.0.1` / `::1` 形式的记录端点；
+   其它地址需人工显式传 `--endpoint`。
+5. 用 `claim.text`、`bound.tau`、复现的嵌入配置重跑同一套流程。
+6. 比对**整个 `core` 体**的每个字段，以及重算摘要与 `claimed core_sha256`。
+   任何不一致都必须判 `DISAGREES`——只重算未加密钥的 sha256 不能洗白被改过的字段。
+7. 结果与退出码：
 
-复算方默认只跑词法通道。若凭证记录了 `embedding_model` 而本次没有端点，
-报告会带 `note` 提示补 `--endpoint`——此时通常会看到 `INCONCLUSIVE` 与 `ABSENT_BOUNDED`
-的差异，这是配置差异，不是凭证错误，报告会原样列出。
+   | 结果 | 含义 | 退出码 |
+   | --- | --- | --- |
+   | `AGREES` | 全字段与摘要一致 | 0 |
+   | `DISAGREES` | 字段或摘要不一致（含全部差异清单） | 3 |
+   | `INCONCLUSIVE` | 凭证声明用了语义通道，但本次无法复现（端点缺失、不可达或不为本机地址） | 4 |
+
+复算方默认按凭证记录的配置重跑。若端点确实不可用，报告会写明尝试的端点与异常类别，
+并判 `INCONCLUSIVE`——这是复核条件不足，不是凭证造假。
 
 ---
 

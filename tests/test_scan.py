@@ -15,6 +15,7 @@ import hashlib
 import io
 import json
 import sqlite3
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -349,12 +350,162 @@ def test_verify_reports_a_missing_semantic_channel(tmp_path: Path, monkeypatch) 
     attest.run_check(
         request(ABSENT_CLAIM, SEED_ARCHIVE, out_dir, endpoint="http://127.0.0.1:1/v1")
     )
+    path = out_dir / "attestation.json"
+    envelope = json.loads(path.read_text(encoding="utf-8"))
+    envelope["auxiliary"]["invocation"]["endpoint"] = None
+    path.write_text(json.dumps(envelope, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.delenv("ABSENTIA_ENDPOINT", raising=False)
+
+    report = attest.run_verify(path)
+    assert report["agreement"] is False
+    assert report["status"] == "INCONCLUSIVE"
+    assert report["recomputed_verdict"] == attest.INCONCLUSIVE
+    assert "嵌入端点" in report.get("note", "")
+
+
+def test_verify_uses_the_endpoint_recorded_in_the_attestation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The reproduce command in the ledger carries no --endpoint; verify re-derives it."""
+    install_fake_embedder(monkeypatch)
+    out_dir = tmp_path / "out"
+    endpoint = "http://127.0.0.1:1/v1"
+    envelope = attest.run_check(
+        request(ABSENT_CLAIM, SEED_ARCHIVE, out_dir, endpoint=endpoint)
+    )
+    assert envelope["auxiliary"]["invocation"]["endpoint"] == endpoint
     monkeypatch.delenv("ABSENTIA_ENDPOINT", raising=False)
 
     report = attest.run_verify(out_dir / "attestation.json")
+
+    assert report["endpoint"] == endpoint
+    assert report["agreement"] is True
+    assert report["status"] == "AGREES"
+    assert report["recomputed_verdict"] == attest.ABSENT_BOUNDED
+
+
+def test_verify_marks_an_unreachable_recorded_endpoint_inconclusive(tmp_path: Path) -> None:
+    patch = pytest.MonkeyPatch()
+    try:
+        install_fake_embedder(patch)
+        out_dir = tmp_path / "out"
+        attest.run_check(
+            request(ABSENT_CLAIM, SEED_ARCHIVE, out_dir, endpoint="http://127.0.0.1:1/v1")
+        )
+    finally:
+        patch.undo()
+
+    report = attest.run_verify(out_dir / "attestation.json")
+
     assert report["agreement"] is False
+    assert report["status"] == "INCONCLUSIVE"
     assert report["recomputed_verdict"] == attest.INCONCLUSIVE
-    assert "endpoint" in report.get("note", "")
+    assert report["embedding_error"]
+    assert report["embedding_error"] in report["note"]
+    assert "嵌入端点" in report["note"]
+    assert "http://127.0.0.1:1/v1" in report["note"]
+
+
+def test_verify_does_not_contact_a_remote_recorded_endpoint(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An attestation is untrusted input; only loopback is contacted automatically."""
+    install_fake_embedder(monkeypatch)
+    out_dir = tmp_path / "out"
+    attest.run_check(
+        request(ABSENT_CLAIM, SEED_ARCHIVE, out_dir, endpoint="http://127.0.0.1:1/v1")
+    )
+    path = out_dir / "attestation.json"
+    envelope = json.loads(path.read_text(encoding="utf-8"))
+    envelope["auxiliary"]["invocation"]["endpoint"] = "https://example.invalid/v1"
+    path.write_text(json.dumps(envelope, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.delenv("ABSENTIA_ENDPOINT", raising=False)
+
+    report = attest.run_verify(path)
+
+    assert report["status"] == "INCONCLUSIVE"
+    assert report["agreement"] is False
+    assert report["blocked_recorded_endpoint"] == "https://example.invalid/v1"
+    assert "不是本机地址" in report["note"]
+    assert "https://example.invalid/v1" in report["note"]
+
+
+def test_cli_verify_prints_inconclusive_for_an_unreachable_recorded_endpoint(
+    tmp_path: Path,
+) -> None:
+    patch = pytest.MonkeyPatch()
+    try:
+        install_fake_embedder(patch)
+        out_dir = tmp_path / "out"
+        attest.run_check(
+            request(ABSENT_CLAIM, SEED_ARCHIVE, out_dir, endpoint="http://127.0.0.1:1/v1")
+        )
+    finally:
+        patch.undo()
+
+    result = CliRunner().invoke(
+        app, ["verify", str(out_dir / "attestation.json")]
+    )
+
+    assert result.exit_code == 4, result.output
+    assert "INCONCLUSIVE" in result.output
+    assert "DISAGREES" not in result.output
+    assert "ConnectError" in result.output
+
+
+def test_verify_rejects_a_forged_body_with_a_recomputed_digest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The tester's attack: edit protected fields, then re-hash the unkeyed digest."""
+    install_fake_embedder(monkeypatch)
+    out_dir = tmp_path / "out"
+    endpoint = "http://127.0.0.1:1/v1"
+    attest.run_check(request(ABSENT_CLAIM, SEED_ARCHIVE, out_dir, endpoint=endpoint))
+    path = out_dir / "attestation.json"
+    envelope = json.loads(path.read_text(encoding="utf-8"))
+    core = envelope["core"]
+
+    core["per_variant"] = core["per_variant"][:2]
+    core["per_variant"][0]["above_tau"] = 21
+    core["corpus"]["docs"] = 4242
+    core["matrix"]["comparisons"] = 1
+    core["bound"]["calibration_recall"] = 0.995
+    envelope["core_sha256"] = hashlib.sha256(
+        ingest.canonical_json(core).encode("utf-8")
+    ).hexdigest()
+    path.write_text(json.dumps(envelope, ensure_ascii=False), encoding="utf-8")
+
+    report = attest.run_verify(path, endpoint=endpoint)
+
+    assert report["agreement"] is False
+    assert report["status"] == "DISAGREES"
+    assert report["recomputed_core_sha256"] != report["claimed_core_sha256"]
+    assert any("core_sha256" in item for item in report["differences"])
+    assert any("corpus.docs" in item for item in report["differences"])
+    assert any("per_variant" in item for item in report["differences"])
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ("{not json", "JSON"),
+        ('{"hello": "world"}', "core"),
+        ('{"core": {}, "core_sha256": ""}', "core_sha256"),
+    ],
+)
+def test_verify_reports_malformed_or_foreign_json_cleanly(
+    tmp_path: Path, payload: str, expected: str
+) -> None:
+    path = tmp_path / "broken.json"
+    path.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(attest.AttestationError):
+        attest.run_verify(path)
+
+    result = CliRunner().invoke(app, ["verify", str(path)])
+    assert result.exit_code == 2, result.output
+    assert expected in result.output
+    assert "Traceback" not in result.output
 
 
 # --------------------------------------------------------------------------- #
@@ -383,6 +534,67 @@ def test_cli_index_check_verify(tmp_path: Path) -> None:
     verified = runner.invoke(app, ["verify", str(out_dir / "attestation.json")])
     assert verified.exit_code == 0, verified.output
     assert "AGREES" in verified.output
+
+
+def test_cli_check_distinguishes_unreachable_from_unconfigured_endpoint(
+    tmp_path: Path,
+) -> None:
+    runner = CliRunner()
+    unreachable = runner.invoke(
+        app,
+        [
+            "check",
+            PRESENT_CLAIM,
+            "--archive",
+            str(SEED_ARCHIVE),
+            "--out",
+            str(tmp_path / "unreachable"),
+            "--endpoint",
+            "http://127.0.0.1:1/v1",
+        ],
+    )
+    assert unreachable.exit_code == 0, unreachable.output
+    assert "嵌入端点不可用" in unreachable.output
+    assert "ConnectError" in unreachable.output
+    assert "未配置嵌入端点" not in unreachable.output
+    ledger = (tmp_path / "unreachable" / "ledger.md").read_text(encoding="utf-8")
+    assert "ConnectError" in ledger
+
+    unconfigured = runner.invoke(
+        app,
+        [
+            "check",
+            PRESENT_CLAIM,
+            "--archive",
+            str(SEED_ARCHIVE),
+            "--out",
+            str(tmp_path / "plain"),
+        ],
+    )
+    assert unconfigured.exit_code == 0, unconfigured.output
+    assert "未配置嵌入端点" in unconfigured.output
+
+
+def test_ledger_citation_is_the_matching_row(tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    attest.run_check(request(PRESENT_CLAIM, SEED_ARCHIVE, out_dir))
+
+    ledger = (out_dir / "ledger.md").read_text(encoding="utf-8")
+    excerpt_lines = [line for line in ledger.splitlines() if line.startswith("- 摘录：")]
+    assert len(excerpt_lines) == 1
+    excerpt = excerpt_lines[0].removeprefix("- 摘录：")
+    assert "2021-06-18" in excerpt
+    assert "道路监控摄像头" in excerpt
+    assert "采购单位" not in excerpt  # the table header is not the evidence
+    assert len(excerpt) <= 221
+
+
+def test_pytest_is_a_dev_extra_not_a_runtime_dependency() -> None:
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    runtime = "\n".join(project.get("dependencies", []))
+    dev = "\n".join(project.get("optional-dependencies", {}).get("dev", []))
+    assert "pytest" not in runtime
+    assert "pytest" in dev
 
 
 def test_cli_json_output_is_the_attestation(tmp_path: Path) -> None:

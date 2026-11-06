@@ -8,7 +8,11 @@ attestation, never recomputed here, so what a reviewer sees is exactly what
 
 from __future__ import annotations
 
-from typing import Mapping
+import re
+from typing import Mapping, Sequence
+
+from .ingest import split_sentences
+from .scan import extract_terms
 
 VERDICT_LABELS = {
     "PRESENT": "命中（有）",
@@ -19,7 +23,7 @@ VERDICT_LABELS = {
 REASON_LABELS = {
     "score_at_or_above_tau": "最高分达到阈值",
     "all_scores_below_tau": "全部 N×M 比对低于阈值",
-    "lexical_only": "未配置嵌入端点，只跑了词法通道",
+    "lexical_only": "只跑了词法通道（无可用嵌入端点）",
     "empty_corpus": "没有可打分的分段",
 }
 
@@ -34,6 +38,44 @@ EXCLUDED_REASONS = {
 
 def _score(value: float) -> str:
     return f"{value:.2f}"
+
+
+CITATION_MAX_CHARS = 220
+# Chunk text is joined without newlines, so a markdown table arrives as
+# "… | 43,200 || 2021-06-18 | …". Split on that row boundary too, otherwise the
+# whole table is one "sentence" and the excerpt is just a header slice.
+_CANDIDATE_BREAK = re.compile(r"\n+|(?<=\|)(?=\|)")
+
+
+def _citation_excerpt(text: str, terms: Sequence[str]) -> str:
+    """The sentence or table row carrying the most query terms.
+
+    The top-ranked chunk often opens with a heading or the tail of an earlier
+    paragraph. Cutting the first 220 characters would show that instead of the
+    evidence, so pick the unit with the strongest term overlap and only then
+    collapse whitespace. The selected words are kept verbatim.
+    """
+    units: list[str] = []
+    for block in _CANDIDATE_BREAK.split(text):
+        for unit in split_sentences(block):
+            unit = unit.strip()
+            if unit:
+                units.append(unit)
+    if not units:
+        return ""
+
+    vocabulary = tuple(term for term in terms if term)
+
+    def rank(item: tuple[int, str]) -> tuple[int, int, int]:
+        index, unit = item
+        matched = [term for term in vocabulary if term in unit]
+        return (len(matched), sum(len(term) for term in matched), -index)
+
+    _, best = max(enumerate(units), key=rank)
+    excerpt = re.sub(r"\s+", " ", best).strip()
+    if len(excerpt) > CITATION_MAX_CHARS:
+        excerpt = excerpt[:CITATION_MAX_CHARS].rstrip() + "…"
+    return excerpt
 
 
 def headline(core: Mapping) -> str:
@@ -62,8 +104,13 @@ def headline(core: Mapping) -> str:
 def summary_line(core: Mapping) -> str:
     """One line for the terminal / MCP response."""
     verdict = core["verdict"]
+    bound = core["bound"]
     label = VERDICT_LABELS.get(verdict["label"], verdict["label"])
-    channel = "仅词法" if core["bound"]["lexical_only"] else f"词法+语义({core['bound']['embedding_model']})"
+    if bound["lexical_only"]:
+        error = bound.get("embedding_error")
+        channel = f"仅词法（端点失败:{error}）" if error else "仅词法"
+    else:
+        channel = f"词法+语义({bound['embedding_model']})"
     return (
         f"{verdict['label']}（{label}） 最高分 {_score(verdict['top1_score'])} / τ "
         f"{_score(verdict['tau'])} · {core['matrix']['comparisons']:,} 次比对 · {channel}"
@@ -97,6 +144,10 @@ def render_ledger(envelope: Mapping) -> str:
         f"| 通道 | {'仅词法（lexical_only）' if bound['lexical_only'] else '词法 + 语义'} |"
     )
     lines.append(f"| 嵌入模型 | {bound['embedding_model'] or '未配置'} |")
+    if bound.get("embedding_error"):
+        lines.append(
+            f"| 嵌入端点 | 调用失败（`{bound['embedding_error']}`），语义通道未运行 |"
+        )
     lines.append(f"| 固定校准召回 | {bound['calibration_recall']:.2f} |")
     lines.append(f"| 文档 / 页 | {corpus['docs']} / {corpus['pages']} |")
     lines.append(f"| 已解析页 | {corpus['parsed_pages']} |")
@@ -132,9 +183,8 @@ def render_ledger(envelope: Mapping) -> str:
 
     citation = (envelope.get("auxiliary") or {}).get("citation")
     if citation:
-        excerpt = " ".join(citation["text"].split())
-        if len(excerpt) > 220:
-            excerpt = excerpt[:220] + "…"
+        terms = extract_terms(verdict.get("top1_variant") or claim["text"])
+        excerpt = _citation_excerpt(citation["text"], terms)
         lines.append("## 最高分段落（供人工复核）")
         lines.append("")
         lines.append(f"- 文件：`{citation['path']}` 第 {citation['page']} 页（`{citation['chunk']}`）")

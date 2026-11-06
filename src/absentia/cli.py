@@ -98,11 +98,19 @@ def check(
     typer.echo(headline(core))
     typer.echo(summary_line(core))
     if core["bound"]["lexical_only"]:
-        typer.echo(
-            "注意：未配置嵌入端点，本次只跑了词法通道，因此不出具 ABSENT_BOUNDED。"
-            "配置 --endpoint 后可复算语义通道。",
-            err=True,
-        )
+        error = core["bound"].get("embedding_error")
+        if error:
+            typer.echo(
+                f"注意：嵌入端点不可用（{error}），本次只跑了词法通道，因此不出具 "
+                "ABSENT_BOUNDED。端点恢复后重跑即可复算语义通道。",
+                err=True,
+            )
+        else:
+            typer.echo(
+                "注意：未配置嵌入端点，本次只跑了词法通道，因此不出具 ABSENT_BOUNDED。"
+                "配置 --endpoint 后可复算语义通道。",
+                err=True,
+            )
     typer.echo(f"凭证  {out / 'attestation.json'}")
     typer.echo(f"台账  {out / 'ledger.md'}")
     typer.echo(f"core_sha256  {envelope['core_sha256']}")
@@ -128,6 +136,9 @@ def verify(
             endpoint=endpoint,
             embed_model=embed_model,
         )
+    except attest.AttestationError as exc:
+        typer.echo(f"无法复算凭证：{exc}", err=True)
+        raise typer.Exit(code=2)
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2)
@@ -135,7 +146,7 @@ def verify(
     if as_json:
         typer.echo(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:
-        state = "AGREES" if report["agreement"] else "DISAGREES"
+        state = report.get("status") or ("AGREES" if report["agreement"] else "DISAGREES")
         typer.echo(
             f"{state}  判定 {report['claimed_verdict']} → 复算 {report['recomputed_verdict']}"
         )
@@ -148,7 +159,7 @@ def verify(
             typer.echo(f"提示  {report['note']}")
 
     if not report["agreement"]:
-        raise typer.Exit(code=3)
+        raise typer.Exit(code=4 if report.get("status") == "INCONCLUSIVE" else 3)
 
 
 @app.command()

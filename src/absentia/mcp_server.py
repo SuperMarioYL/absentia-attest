@@ -130,7 +130,7 @@ def call_absence_verify(arguments: dict, default_archive: Path | None) -> dict:
         endpoint=arguments.get("endpoint"),
     )
     report["summary"] = (
-        "AGREES" if report["agreement"] else "DISAGREES"
+        report.get("status") or ("AGREES" if report["agreement"] else "DISAGREES")
     ) + f" 判定 {report['claimed_verdict']} → 复算 {report['recomputed_verdict']}"
     return report
 

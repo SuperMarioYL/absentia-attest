@@ -44,10 +44,13 @@
 
 ## 3. `core` 字段
 
+下面的字段示例取自 `fixtures/seed_archive` 上用命题「Flock 摄像头采购」跑的一次真实运行
+（仅词法通道，未配置嵌入端点），数字与仓库里的 `docs/demo-results.json` 一致。
+
 ### 3.1 `claim`
 
 ```jsonc
-{ "text": "Flock 车牌识别系统采购", "normalized": "Flock 车牌识别系统采购" }
+{ "text": "Flock 摄像头采购", "normalized": "Flock 摄像头采购" }
 ```
 
 `normalized` = 繁转简 + 去掉疑问词（有没有／是否／有无／曾否）+ 去掉年份区间（`2009-2025` 是范围不是内容）+ 压缩空白。
@@ -83,8 +86,8 @@ v0.1 只有词典驱动的三类改写（简繁、全称/简称/别称、公文�
 
 ```jsonc
 {
-  "chunks": 21, "variants": 3, "comparisons": 63,
-  "sha256": "…",
+  "chunks": 21, "variants": 4, "comparisons": 84,
+  "sha256": "77ddaf88786a4824d6631ce139943115b8ac63504b6c9c0061f435df381b8181",
   "scoring": {
     "lexical": "fts5_trigram_idf_term_coverage",
     "semantic": "cosine",
@@ -104,10 +107,10 @@ v0.1 只有词典驱动的三类改写（简繁、全称/简称/别称、公文�
 
 ```jsonc
 {
-  "variant": "…", "chunks_scored": 21, "above_tau": 0,
-  "top1_score": 0.11, "top1_chunk": "2293fbb64f:p0001:c000",
-  "lexical_path": "fts_trigram|like_fallback|none",
-  "fired_by": "lexical|semantic|both|none"
+  "variant": "Flock 视频监控设备采购", "chunks_scored": 21, "above_tau": 0,
+  "top1_score": 0.086202, "top1_chunk": "2293fbb64f:p0001:c000",
+  "lexical_path": "like_fallback",
+  "fired_by": "lexical"
 }
 ```
 
@@ -119,11 +122,11 @@ FTS5 trigram 命中、2 字中文词走 `LIKE` 回退、还是完全没命中。
 
 ```jsonc
 {
-  "embedding_model": "bge-m3",   // 词法-only 时为 null
+  "embedding_model": null,       // 词法-only 时为 null
   "tau": 0.62,
   "calibration_recall": 0.86,    // 随包发布的固定表，不是对本次语料的测量
-  "lexical_only": false,
-  "embedding_error": "ConnectError"  // 仅在降级时出现，类别名而非报错原文
+  "lexical_only": true
+  // "embedding_error": "ConnectError" 仅在端点配置了但调用失败时出现，类别名而非报错原文
 }
 ```
 
@@ -139,9 +142,10 @@ CLI 的提示行和 `ledger.md` 的「嵌入端点」行会分别写出异常类
 
 ```jsonc
 {
-  "label": "PRESENT|ABSENT_BOUNDED|INCONCLUSIVE",
-  "reason": "score_at_or_above_tau|all_scores_below_tau|lexical_only|empty_corpus",
-  "top1_score": 0.11, "top1_chunk": "…", "top1_variant": "…", "tau": 0.62
+  "label": "INCONCLUSIVE",
+  "reason": "lexical_only",
+  "top1_score": 0.251183, "top1_chunk": "7bf5aadd79:p0001:c000",
+  "top1_variant": "Flock 摄像头采购", "tau": 0.62
 }
 ```
 
@@ -263,6 +267,6 @@ absentia verify .absentia/attestation.json [--archive DIR] [--tau T] [--endpoint
 - 不支持增量索引：每次 `check` 全量重建（这是可复算的代价，也是刻意的选择）。
 - 口径词典只覆盖简繁、全称/简称/别称、公文套话与同义动词，不覆盖方言与外语。
 - `calibration_recall` 是随包固定表，不做自动校准曲线。
-- 纯 Python 点积：万段级档案在普通笔记本上是分钟级，不是秒级；v0.1 不引入 numpy。
+- 纯 Python 点积：v0.1 不引入 numpy；随附演示档案只有 21 段，仓库里没有更大档案的基准数据。
 - 语义通道的可复算性依赖本机模型与端点本身确定；换量化版本会改变 `matrix.sha256`，
   凭证会把差异暴露出来，而不是假装一致。

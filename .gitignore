@@ -14,11 +14,9 @@ venv/
 # editor / os
 .DS_Store
 
-# agent tooling config
+# local build scratch
 .claude/
 CLAUDE.md
-
-# build scratch
 PUBLISH_BLOCKED.md
 BUILD_SETUP_NEXT_STEPS.md
 _build_ctx.json

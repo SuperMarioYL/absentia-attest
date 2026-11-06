@@ -26,16 +26,21 @@ RAG can show you what is there. It cannot show that an exhaustive search found n
 
 ## Quickstart
 
-Python 3.12 is required (only 3.12 is currently tested). The lexical channel works without any embedding endpoint; the semantic channel needs a local OpenAI-compatible endpoint — see [Semantic channel](#semantic-channel).
+Python 3.12 or newer is required (CI currently tests 3.12 only). The lexical channel works without any embedding endpoint; the semantic channel needs a local OpenAI-compatible endpoint — see [Semantic channel](#semantic-channel).
+
+**Before the first public release**: install from your local checkout of the repository:
 
 ```bash
-git clone https://github.com/SuperMarioYL/absentia-attest.git
+# Before the first public release: clone your local checkout
+git clone <path to your local checkout> absentia-attest
 cd absentia-attest
 python3.12 -m venv .venv
-source .venv/bin/activate
+. .venv/bin/activate
 pip install -e .
 absentia --version
 ```
+
+Once the repository is public, replace the first line with `git clone https://github.com/SuperMarioYL/absentia-attest.git`.
 
 Output:
 
@@ -43,7 +48,7 @@ Output:
 absentia 0.1.0
 ```
 
-Run it against the seven bundled council minutes and procurement records. First build the manifest:
+Run it against the seven bundled files (four sets of town mayor's office meeting minutes, one procurement ledger, one finance summary, one archive index). First build the manifest:
 
 ```bash
 absentia index fixtures/seed_archive
@@ -220,26 +225,22 @@ The server implements the stdio transport directly as newline-delimited JSON-RPC
 - **No incremental indexing.** Every `check` rebuilds from scratch. That is the price of recomputability, and a deliberate one.
 - **The phrasing lexicon covers three Chinese rewrite families only**: simplified/traditional, full name/alias, and officialese/synonymous verbs. Dialects and foreign languages are out of scope for v0.1.
 - **`calibration_recall` is a fixed table shipped with the package**, not a measurement on your corpus. A private archive has no labelled query set; this cannot be papered over.
-- **Pure-Python dot products.** An archive in the tens of thousands of chunks takes minutes, not seconds. v0.1 does not bring in numpy.
+- **Pure-Python dot products.** v0.1 does not bring in numpy; the bundled demo archive has 21 chunks and the repository contains no benchmark for larger archives.
 - **Recomputability of the semantic channel depends on the local model being deterministic.** Changing the quantization changes `matrix.sha256`; the attestation exposes that difference instead of pretending it agrees.
 - **`verify` only connects automatically to loopback endpoints** (`localhost` / `127.0.0.1` / `::1`). If the attestation records a remote endpoint, a human must pass `--endpoint` explicitly, so archive text is never sent to an unknown host by default.
 
 ## Pricing
 
-The CLI is open source under MIT; individuals, journalists and monitoring groups can use every v0.1 command as-is. What is paid is the layer that turns a ledger into an archival workpaper for an audit firm — **delivered in v0.2, not implemented in v0.1, and not being charged for today**.
+The CLI is open source under MIT. Individuals, journalists and monitoring groups can use every v0.1 command free of charge.
 
-| Plan | Who it is for | Price | What is delivered |
-| --- | --- | --- | --- |
-| Open-source CLI | Individuals, investigative journalists, village/owners'-committee monitors | ¥0 (MIT) | All v0.1 commands, `attestation.json`, `ledger.md` |
-| Annual firm licence | Special-purpose and engineering audit firms of 5–20 people | ¥3,980 / year / firm, 3 seats included; ¥1,200 / seat / year from the 4th seat | v0.2 workpaper export (xlsx + signature page), batch concurrency, private wheel and offline licence file |
-| Single signed report | One-off delivery | ¥1,800 / report | Signed ledger with `manifest_sha256` and a recomputation note |
+The only paid layer is the one that turns a ledger into an archival workpaper: **audit workpaper xlsx and signature-page export, plus batch concurrency**. It ships in v0.2, is not implemented in v0.1, and is not being charged for today. Pricing is quoted per seat / per year; contact [leo.stack@outlook.com](mailto:leo.stack@outlook.com), or open an issue on the repository to discuss a pilot.
 
-The right next step today is a two-week pilot on your own old workpapers: confirm whether this coverage number can go straight into a workpaper. Purchasing and delivery start with v0.2. Open an issue on the repository for pilots and partnership.
+The right next step today is a two-week pilot on your own old workpapers: confirm whether this coverage number can go straight into a workpaper. Purchasing and delivery start with v0.2.
 
 ## Roadmap
 
 - **v0.1.0 (current)** — m1 manifest and parse-failure ledger; m2 multi-phrasing hybrid scoring, verdict and verification; m3 stdio MCP server. The CLI commands `index` / `check` / `verify` / `mcp` all work.
-- **v0.2** — the paid layer: audit workpaper xlsx and signature-page export, batch concurrency, PyPI distribution.
+- **v0.2** — the paid layer: audit workpaper xlsx and signature-page export, batch concurrency; PyPI distribution (after release, `uv tool install absentia-attest` becomes available).
 - **Unscheduled** — OCR for scanned pages, incremental indexing and directory watching, non-Chinese phrasing lexicons. None of these are promised in v0.1.
 
 ## License

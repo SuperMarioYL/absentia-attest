@@ -69,12 +69,14 @@ v0.1 只有词典驱动的三类改写（简繁、全称/简称/别称、公文�
 
 ```jsonc
 {
-  "archive": "./council-notes",
+  "archive": "fixtures/seed_archive",
   "docs": 7, "pages": 7, "parsed_pages": 7, "chunks": 21,
-  "excluded": [ { "path": "scan.pdf", "reason": "no_text_layer", "pages": 3 } ],
-  "manifest_sha256": "…"
+  "excluded": [],
+  "manifest_sha256": "b59e497de998c0501208749c2e812712b86d59c8bf0ac4d5a4d972608fcff09e"
 }
 ```
+
+这一次 7 个文件全部解析成功，所以 `excluded` 是空数组。该字段出现条目时，各键的含义如下：
 
 - `pages` 是**已知页数**：已解析文件的页数 + 未解析文件里能读到的页数。
 - `excluded[].pages == 0` 且 `reason == "encrypted"` 表示页数不可知（PDF 被口令封住时，

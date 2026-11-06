@@ -1,0 +1,441 @@
+{
+  "schema": 3,
+  "name": "absentia",
+  "github": "https://github.com/SuperMarioYL/absentia-attest",
+  "palette": "auto",
+  "lang": {
+    "primary": "zh",
+    "toggle": true
+  },
+  "hero": {
+    "eyebrow": {
+      "zh": "absentia · 本地档案查证 · 覆盖度有界",
+      "en": "absentia · local archive verification · bounded coverage"
+    },
+    "headline": {
+      "zh": "把「没查到」\n写成有界的结论。",
+      "en": "Turn not-found\ninto a bounded verdict."
+    },
+    "sub": {
+      "zh": "RAG 只证「有」。absentia 对本地中文档案跑全量 N×M 打分，把一次空结果写成带页数、口径、阈值与未解析清单的缺席凭证；判定只看最高分与 τ，另一台机器上的 verify 可以重算。",
+      "en": "RAG proves presence. absentia scores a local Chinese archive exhaustively, then turns one empty result into an attestation carrying page counts, query variants, the threshold and the unscanned ledger. The verdict reads only the top score and τ, and verify can recompute it on another machine."
+    },
+    "href": "#quickstart",
+    "cta": {
+      "zh": "本地跑一遍",
+      "en": "Run it locally"
+    },
+    "ctaGithub": {
+      "zh": "在 GitHub 查看",
+      "en": "View on GitHub"
+    }
+  },
+  "advantages": [
+    {
+      "title": {
+        "zh": "覆盖度是算出来的",
+        "en": "Coverage is counted, not claimed"
+      },
+      "body": {
+        "zh": "check 对每一段、每一种口径都打分：录制档案 21 段 × 4 种口径 = 84 次比对，没有抽样。matrix.sha256 覆盖每个（口径序号、分段 key、词法分、语义分）四元组，任何一分变了摘要就变。「缺席」因此只有一个含义：84 个分数全部低于 τ，而不是模型说它没看到。",
+        "en": "check scores every chunk against every variant: the recorded archive ran 21 chunks times 4 variants, 84 comparisons, with no sampling. matrix.sha256 covers each (variant index, chunk key, lexical score, semantic score) tuple, so a single changed score changes the digest. That leaves exactly one meaning for absent: all 84 scores below τ, never the model saying it saw nothing."
+      },
+      "chips": ["21 × 4 = 84", "no sampling", "matrix.sha256"]
+    },
+    {
+      "title": {
+        "zh": "模型不在判定路径里",
+        "en": "The model is not in the decision"
+      },
+      "body": {
+        "zh": "判定只读两个数：N×M 的最高分与配置的 τ。四条规则写进凭证格式——达到 τ 是 PRESENT，低于 τ 且只有词法通道是 INCONCLUSIVE，低于 τ 且语义通道覆盖全部分段才是 ABSENT_BOUNDED。可选的 --adjudicate 抽样复核放在 auxiliary，不参与哈希；删掉它，verdict 与 core_sha256 都不变。",
+        "en": "The verdict reads two numbers: the highest of the N×M scores and the configured τ. Four written rules cover every case — at or above τ is PRESENT; below τ with only the lexical channel is INCONCLUSIVE; below τ with the semantic channel covering every chunk is ABSENT_BOUNDED. The optional --adjudicate sample sits in auxiliary, outside the hash; remove it and neither the verdict nor core_sha256 changes."
+      },
+      "chips": ["top1 vs τ", "adjudication outside the hash", "same digest without it"]
+    },
+    {
+      "title": {
+        "zh": "字面没命中，不等于缺席",
+        "en": "A literal miss is not an absence"
+      },
+      "body": {
+        "zh": "没有可用嵌入端点时，absentia 拒绝出具 ABSENT_BOUNDED，改报 INCONCLUSIVE，并把 lexical_only=true 写进 bound。录制机就是这种情况：最高分 0.25 < 0.62，结论是无法判定，不是缺席。端点配置了但调用失败时整体降级，不做部分覆盖——一半分段有向量、一半没有，是最危险的状态。",
+        "en": "With no usable embedding endpoint, absentia refuses ABSENT_BOUNDED, reports INCONCLUSIVE instead, and records lexical_only=true in bound. That is exactly what the recording host did: top score 0.25 below 0.62, a verdict of inconclusive rather than absent. If an endpoint is configured but a batch fails, the whole run degrades — no partial coverage, because half the chunks vectorised is the most dangerous state."
+      },
+      "chips": ["0.25 < τ 0.62", "refuses ABSENT_BOUNDED", "no partial coverage"]
+    },
+    {
+      "title": {
+        "zh": "另一个审计员能重算",
+        "en": "Another auditor can recompute it"
+      },
+      "body": {
+        "zh": "凭证分成受保护的 core 与不受保护的 auxiliary：时间戳、机器路径、模型抽样都在 auxiliary，不进哈希。verify 在临时目录重建索引，比对 core 的每个字段与摘要，不改被审档案，也不覆盖原凭证。退出码 0 一致、3 不一致、4 复核条件不足；录制里的两份凭证都返回 AGREES。",
+        "en": "An attestation splits into a protected core and an unprotected auxiliary: timestamps, machine paths and model samples live in auxiliary and never enter the hash. verify rebuilds the index in a temporary directory and compares every core field and digest, without touching the audited archive or the original attestation. Exit code 0 agrees, 3 disagrees, 4 means the conditions cannot be reproduced; both recorded attestations came back AGREES."
+      },
+      "chips": ["core_sha256", "temporary rebuild", "exit 0 · 3 · 4"]
+    }
+  ],
+  "demo": {
+    "title": {
+      "zh": "一次录制的运行",
+      "en": "One recorded run"
+    },
+    "note": {
+      "zh": "在仓库自带的 fixtures/seed_archive 上录制：7 份文档、7 页、21 段。录制机没有本地嵌入端点，所以两次 check 都只跑了词法通道；下面的命令与输出逐字来自 docs/demo-results.json。这不是基准测试——7 份文本档案不是语料基准，数字证明的是代码路径与凭证格式。",
+      "en": "Recorded on the repository's own fixtures/seed_archive: 7 documents, 7 pages, 21 chunks. The recording host had no local embedding endpoint, so both checks ran the lexical channel only; the commands and output below are verbatim from docs/demo-results.json. This is not a benchmark — seven text documents are not a corpus benchmark, and the numbers prove the code path and the attestation format."
+    },
+    "source": "https://github.com/SuperMarioYL/absentia-attest/blob/main/docs/demo-results.json",
+    "steps": [
+      {
+        "label": {
+          "zh": "建清单",
+          "en": "Build the manifest"
+        },
+        "body": {
+          "zh": "解析 7 份文档，分页、切块，写出带 sha256 的清单。清单不含绝对路径、时间戳或文件 mtime，所以同一目录重跑得到逐字节相同的 manifest.json；manifest_sha256 是第三方核对「审的是同一批字节」时重算的值。",
+          "en": "Parses seven documents, paginates and chunks them, and writes a manifest with a digest. The manifest holds no absolute paths, timestamps or mtimes, so rerunning on the same tree produces a byte-identical manifest.json; manifest_sha256 is the value a third party recomputes to confirm they audited the same bytes."
+        },
+        "image": "/assets/demo-0-light.svg",
+        "imageDark": "/assets/demo-0-dark.svg",
+        "command": "absentia index fixtures/seed_archive",
+        "output": "7 文档 / 7 页（已解析 7）/ 21 段 / 0 个文件未解析\n清单  .absentia/manifest.json\n索引  .absentia/index.sqlite\nmanifest_sha256  b59e497de998c0501208749c2e812712b86d59c8bf0ac4d5a4d972608fcff09e"
+      },
+      {
+        "label": {
+          "zh": "问一条档案里没有的命题",
+          "en": "Ask for something the archive lacks"
+        },
+        "body": {
+          "zh": "Flock 是车牌识别系统，而这批采购里明确写着监控设备「不含识别软件」。4 种口径 × 21 段全部打分，最高分 0.25 < τ 0.62。录制机只跑了词法通道，工具因此在 stderr 写下「注意：未配置嵌入端点，本次只跑了词法通道，因此不出具 ABSENT_BOUNDED。配置 --endpoint 后可复算语义通道。」，判定为 INCONCLUSIVE。",
+          "en": "Flock is a licence-plate recognition system, and this procurement explicitly excludes recognition software from the monitoring equipment. All 4 variants times 21 chunks were scored; the highest was 0.25 against τ 0.62. Because the recording host ran the lexical channel only, the tool wrote to stderr: 注意：未配置嵌入端点，本次只跑了词法通道，因此不出具 ABSENT_BOUNDED。配置 --endpoint 后可复算语义通道。 The verdict is INCONCLUSIVE."
+        },
+        "image": "/assets/demo-1-light.svg",
+        "imageDark": "/assets/demo-1-dark.svg",
+        "command": "absentia check \"Flock 摄像头采购\" --archive fixtures/seed_archive",
+        "output": "7 页中 7 页已解析并逐段打分，4 种口径改写 × 21 段 = 84 次比对，最高相似度 0.25 < 阈值 0.62，判定：无法判定；未解析 0 页已列出\nINCONCLUSIVE（无法判定） 最高分 0.25 / τ 0.62 · 84 次比对 · 仅词法\n凭证  .absentia/attestation.json\n台账  .absentia/ledger.md\ncore_sha256  181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343"
+      },
+      {
+        "label": {
+          "zh": "复算这份凭证",
+          "en": "Recompute the attestation"
+        },
+        "body": {
+          "zh": "verify 先在临时目录重建索引，再重算 core 的摘要并与文件里的 core_sha256 比对。两次摘要相同，判定也相同，所以返回 AGREES。同一份凭证里记录的口径改写是确定性的：同一命题在任何机器上都得到同一组写法。",
+          "en": "verify rebuilds the index in a temporary directory, recomputes the core digest and compares it with the core_sha256 stored in the file. Both digests and both verdicts match, so it returns AGREES. The variants recorded in the same file are deterministic: the same claim yields the same set of phrasings on any machine."
+        },
+        "image": "/assets/demo-2-light.svg",
+        "imageDark": "/assets/demo-2-dark.svg",
+        "command": "absentia verify .absentia/attestation.json",
+        "output": "AGREES  判定 INCONCLUSIVE → 复算 INCONCLUSIVE\nclaimed core_sha256     181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343\nrecomputed core_sha256  181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343"
+      },
+      {
+        "label": {
+          "zh": "问一条档案里有答案的命题",
+          "en": "Ask for something the archive contains"
+        },
+        "body": {
+          "zh": "换一条确实有的：最高分 1.00 ≥ τ 0.62，判定 PRESENT。凭证里记下引文所在的 procurement_ledger.md 第 1 页与分段 key，摘录是采购台账的那一行：「| 2021-06-18 | 镇综合行政执法队 | 采购 道路监控摄像头 12 台及配套立杆 | 43,200 |」。同样的 84 次比对，这次有一个分数越过了阈值。",
+          "en": "A claim the archive does answer: top score 1.00 at or above τ 0.62, verdict PRESENT. The attestation records the page and chunk key behind the citation — page 1 of procurement_ledger.md — with the ledger line as excerpt: 「| 2021-06-18 | 镇综合行政执法队 | 采购 道路监控摄像头 12 台及配套立杆 | 43,200 |」. The same 84 comparisons, this time with one score above the threshold."
+        },
+        "image": "/assets/demo-3-light.svg",
+        "imageDark": "/assets/demo-3-dark.svg",
+        "command": "absentia check 道路监控摄像头采购 --archive fixtures/seed_archive --out .absentia-present",
+        "output": "7 页中 7 页已解析并逐段打分，4 种口径改写 × 21 段 = 84 次比对，最高相似度 1.00 ≥ 阈值 0.62，判定：命中（有）；未解析 0 页已列出\nPRESENT（命中（有）） 最高分 1.00 / τ 0.62 · 84 次比对 · 仅词法\n凭证  .absentia-present/attestation.json\n台账  .absentia-present/ledger.md\ncore_sha256  95b4e0734dd926f861c7c027283bef62db4b6840ae057f1f304ecb5d2fd90856"
+      },
+      {
+        "label": {
+          "zh": "复算命中结论",
+          "en": "Recompute the present verdict"
+        },
+        "body": {
+          "zh": "命中结论也要能复算，否则凭证只对否定结论有效。verify 对第二份凭证返回 AGREES，claimed 与 recomputed 都是 95b4e073…。两次运行使用不同的输出目录，互不覆盖。",
+          "en": "A present verdict has to recompute too, or the attestation would only work for negatives. verify returns AGREES on the second file, with both claimed and recomputed digests at 95b4e073… The two runs wrote to different output directories and did not overwrite each other."
+        },
+        "image": "/assets/demo-4-light.svg",
+        "imageDark": "/assets/demo-4-dark.svg",
+        "command": "absentia verify .absentia-present/attestation.json",
+        "output": "AGREES  判定 PRESENT → 复算 PRESENT\nclaimed core_sha256     95b4e0734dd926f861c7c027283bef62db4b6840ae057f1f304ecb5d2fd90856\nrecomputed core_sha256  95b4e0734dd926f861c7c027283bef62db4b6840ae057f1f304ecb5d2fd90856"
+      }
+    ]
+  },
+  "quickstart": {
+    "title": {
+      "zh": "第一次跑通",
+      "en": "Your first run"
+    },
+    "body": {
+      "zh": "需要 Python 3.12（CI 只在 3.12 上验证，录制环境是 3.12.13）。仓库还没有发布到 PyPI，所以从你手上的仓库副本安装：装完命令是 absentia，发行名是 absentia-attest。下面用仓库自带的 7 份档案跑，不需要先准备语料。",
+      "en": "Python 3.12 is required (CI verifies 3.12 only; the recording ran 3.12.13). The package is not on PyPI yet, so install from the copy of the repository you have: the distribution is absentia-attest and the command it installs is absentia. The steps below use the seven documents shipped in the repo, so no corpus preparation is needed first."
+    },
+    "steps": [
+      {
+        "title": {
+          "zh": "从本地副本安装（发布前）",
+          "en": "Install from a local copy (pre-release)"
+        },
+        "code": "git clone <你本地的仓库副本路径> absentia-attest\ncd absentia-attest\npython3.12 -m venv .venv\n. .venv/bin/activate\npip install -e .\nabsentia --version"
+      },
+      {
+        "title": {
+          "zh": "建清单",
+          "en": "Build the manifest"
+        },
+        "code": "absentia index fixtures/seed_archive"
+      },
+      {
+        "title": {
+          "zh": "查证并出具凭证",
+          "en": "Check a claim and write the attestation"
+        },
+        "code": "absentia check \"Flock 摄像头采购\" --archive fixtures/seed_archive"
+      },
+      {
+        "title": {
+          "zh": "在临时目录复算",
+          "en": "Recompute in a temporary directory"
+        },
+        "code": "absentia verify .absentia/attestation.json"
+      },
+      {
+        "title": {
+          "zh": "接一个本机嵌入端点（可选）",
+          "en": "Attach a local embedding endpoint (optional)"
+        },
+        "code": "ollama pull bge-m3\nabsentia check \"Flock 摄像头采购\" --archive fixtures/seed_archive \\\n  --endpoint http://127.0.0.1:11434/v1 --embed-model bge-m3"
+      },
+      {
+        "title": {
+          "zh": "换成自己的档案",
+          "en": "Point it at your own archive"
+        },
+        "code": "absentia check \"2009-2025 年间有没有批准过摄像头采购\" --archive /path/to/your/archive"
+      }
+    ]
+  },
+  "scene": {
+    "kind": "neon-graph",
+    "fallback": "/assets/scene-dark.svg",
+    "fallbackLight": "/assets/scene-light.svg",
+    "caption": {
+      "zh": "首屏是示意粒子图：一份本地档案被拆成页与段，多种口径分别打分后汇成一份凭证，再进入复算。真实计数与录制输出在下面的 Demo 里。",
+      "en": "An illustrative particle graph: a local archive is split into pages and chunks, several phrasings are scored against each one, and the results converge into one attestation that then goes to recomputation. Exact counts and recorded output are in the demo below."
+    }
+  },
+  "story": {
+    "intro": {
+      "title": {
+        "zh": "否定结论需要一个交接对象",
+        "en": "A negative conclusion needs something to hand over"
+      },
+      "body": {
+        "zh": "把十几年的会议纪要交给长上下文或一套 RAG，问「有没有提过某件事」，通常只有两种输出：一段引文，或者什么都没有。前者能证明「有」；后者把三种完全不同的情况压成同一句话——确实没有、模型没读到、检索没召回。需要为「没有」签字的人，缺的不是更会找答案的模型，而是一份说明这次检索读到了哪里、用了几种问法、在哪条线上停下的文件。absentia 把这次交接变成一个可复算的文件：读了多少页、按几段打分、阈值多少、哪些页没读进去。",
+        "en": "Ask a long context window or a RAG stack whether sixteen years of meeting minutes ever mention something, and you get one of two outputs: a quotation, or nothing. The quotation proves presence. The nothing collapses three different situations into one sentence — genuinely absent, never read, never retrieved. Whoever has to sign for a no does not need a better answer-finder; they need a file that says how far this search actually read, how many ways the question was asked, and where the line was drawn. absentia turns that handoff into a recomputable file: pages read, chunks scored, threshold used, and pages that never entered the matrix."
+      }
+    },
+    "sections": [
+      {
+        "title": {
+          "zh": "「没有」有三种，凭证只认一种",
+          "en": "Three kinds of nothing, one of which can be certified"
+        },
+        "body": {
+          "zh": "长上下文整批投喂能给引文，但空回答分不清漏读与真缺席，换一个量化版本还可能翻转。RAG 有引文可查，但空召回和真缺席是同一个形状，覆盖度通常不落盘。grep 的日志可以复算，却覆盖不了同义改写：它只证字面缺席。absentia 的位置在第四个格子——只有语义通道对全部 N×M 组合打完分，字面没命中才允许升级成 ABSENT_BOUNDED；只跑了词法通道时，它把结论停在 INCONCLUSIVE，并把这条边界写进凭证。",
+          "en": "Stuffing everything into a long context can produce a quotation, but an empty answer cannot distinguish a skipped page from a real absence, and a different quantisation may flip it. RAG leaves a citation trail, but empty recall and true absence share one shape, and coverage usually never reaches disk. A grep log is recomputable yet cannot cover synonymous phrasing: it proves a literal miss only. absentia occupies the fourth cell — a literal miss becomes ABSENT_BOUNDED only after the semantic channel has scored every one of the N×M pairs; when only the lexical channel ran, the verdict stops at INCONCLUSIVE and the boundary travels inside the attestation."
+        },
+        "image": {
+          "light": "/assets/why-light.svg",
+          "dark": "/assets/why-dark.svg",
+          "alt": {
+            "zh": "一次空结果分成三种情况：没读到、没召回、全部打分低于阈值；只有第三种能成为有界缺席",
+            "en": "One empty result splits into three cases: never read, never retrieved, and every score below the threshold; only the third becomes a bounded absence"
+          },
+          "mobile": {
+            "light": "/assets/why-mobile-light.svg",
+            "dark": "/assets/why-mobile-dark.svg"
+          }
+        }
+      },
+      {
+        "title": {
+          "zh": "从档案到一份可复核的文件",
+          "en": "From an archive to a file someone can recheck"
+        },
+        "body": {
+          "zh": "ingest 解析有文字层的 PDF、DOCX、TXT、MD，按页切分，再按约 400 字切成段（重叠 80 字），写出 sha256 清单与解析失败台账。variants 用内置词典做三类确定性改写：简繁、全称/简称/别称、公文套话与同义动词。scan 对每个组合打分：词法走 FTS5 trigram，两字中文词回退到 LIKE，语义走本机 OpenAI 兼容端点的句向量，两个通道取 max 合并。attest 写出判定与 core_sha256，render 生成一页台账。录制档案是 7 份文档、7 页、21 段、4 种口径，共 84 次比对。",
+          "en": "ingest parses text-layer PDF, DOCX, TXT and MD, pages them, then chunks at roughly 400 characters with an 80-character overlap, producing a sha256 manifest and an exclusion ledger. variants applies three deterministic dictionary rewrites: simplified/traditional, full/short/alias names, and formulaic phrasing with synonyms. scan scores every pair — lexical through FTS5 trigram with a LIKE fallback for two-character Chinese terms, semantic through sentence embeddings from a local OpenAI-compatible endpoint — and combines them with max. attest writes the verdict and core_sha256; render produces a one-page ledger. The recorded archive was 7 documents, 7 pages, 21 chunks and 4 variants: 84 comparisons."
+        },
+        "image": {
+          "light": "/assets/process-light.svg",
+          "dark": "/assets/process-dark.svg",
+          "alt": {
+            "zh": "档案经解析与切块进入清单，命题经确定性改写成多种口径，两者做 N×M 打分后写出凭证与台账，再由 verify 复算",
+            "en": "The archive is parsed and chunked into a manifest, the claim is rewritten into deterministic variants, every pair is scored, and the run writes an attestation and ledger that verify later recomputes"
+          },
+          "mobile": {
+            "light": "/assets/process-mobile-light.svg",
+            "dark": "/assets/process-mobile-dark.svg"
+          }
+        }
+      },
+      {
+        "title": {
+          "zh": "七个模块，一个进程",
+          "en": "Seven modules, one process"
+        },
+        "body": {
+          "zh": "cli.py 是 typer 命令层，只解析参数、打印和设退出码。ingest.py 唯一拥有解析边界与分页规则；variants.py 唯一拥有改写词典；scan.py 唯一拥有打分公式与 FTS5 建表语句；attest.py 唯一拥有判定表、摘要与 verify；render.py 的台账不重算任何数，全部抄自凭证；mcp_server.py 用换行分隔的 JSON-RPC 2.0 直接实现 stdio，不依赖第三方 SDK。状态只在 sqlite 索引、清单与输出目录里，没有守护进程、数据库服务或托管 API；唯一的网络出口是你自己指定的本机嵌入端点。",
+          "en": "cli.py is the typer command layer: it resolves arguments, prints and sets exit codes. ingest.py alone owns parse boundaries and pagination; variants.py alone owns the rewrite dictionary; scan.py alone owns the scoring formula and the FTS5 schema; attest.py alone owns the decision table, digests and verify; render.py's ledger recomputes nothing and copies every number from the attestation; mcp_server.py implements stdio directly with newline-delimited JSON-RPC 2.0 and no third-party SDK. State lives only in the sqlite index, the manifest and output directories — no daemon, database service or hosted API. The one network egress is the local embedding endpoint you name."
+        },
+        "image": {
+          "light": "/assets/architecture-light.svg",
+          "dark": "/assets/architecture-dark.svg",
+          "alt": {
+            "zh": "absentia 的七个模块，以及档案、命题、清单、索引、凭证与台账之间的数据流",
+            "en": "The seven absentia modules and the data flowing between the archive, the claim, the manifest, the index, the attestation and the ledger"
+          },
+          "mobile": {
+            "light": "/assets/architecture-mobile-light.svg",
+            "dark": "/assets/architecture-mobile-dark.svg"
+          }
+        }
+      },
+      {
+        "title": {
+          "zh": "带了什么，要你准备什么",
+          "en": "What ships, what you bring"
+        },
+        "body": {
+          "zh": "v0.1 有四条命令：index、check、verify、mcp；check 与 verify 支持 --json，verify 的退出码可以直接当闸门（0 一致、3 不一致、4 复核条件不足）。你需要 Python 3.12、一个有文字层的档案目录；语义通道另需本机 OpenAI 兼容端点与嵌入模型（默认 bge-m3，不装 torch，不接托管 API）。不需要 GPU，也不需要预先建向量库：每次 check 全量重建 sqlite 索引，这是可复算的代价。审计底稿 xlsx 与签章页导出、批量并发属于 v0.2 的付费层，v0.1 不含，也不收款。",
+          "en": "v0.1 ships four commands: index, check, verify and mcp; check and verify accept --json, and verify's exit code works as a gate (0 agrees, 3 disagrees, 4 cannot reproduce). You bring Python 3.12 and an archive directory with a text layer; the semantic channel additionally needs a local OpenAI-compatible endpoint and an embedding model (bge-m3 by default, no torch, no hosted API). No GPU, and no vector database to prepare: every check rebuilds the sqlite index in full, which is the price of recomputability. The audit-workpaper xlsx export, signature page and batch concurrency belong to the paid v0.2 layer; v0.1 does not include them and does not charge."
+        },
+        "image": {
+          "light": "/assets/integrations-light.svg",
+          "dark": "/assets/integrations-dark.svg",
+          "alt": {
+            "zh": "v0.1 的四条命令、操作者需要提供的输入，以及 MCP 与档案目录的接法",
+            "en": "The four commands in v0.1, the inputs the operator supplies, and how MCP attaches to an archive directory"
+          },
+          "mobile": {
+            "light": "/assets/integrations-mobile-light.svg",
+            "dark": "/assets/integrations-mobile-dark.svg"
+          }
+        }
+      }
+    ],
+    "details": [
+      {
+        "title": {
+          "zh": "凭证里有什么",
+          "en": "What is inside an attestation"
+        },
+        "body": {
+          "zh": "attestation.json 分信封与内核。core 是受保护的本体：命题、改写、语料计数、矩阵摘要、每个口径的结果、界与判定；core_sha256 是对 core 规范化 JSON 取的 sha256。auxiliary 说明这次是怎么跑的——创建时间、调用参数、可选的裁决抽样——不参与哈希。时间戳尊重 SOURCE_DATE_EPOCH，设置后两次运行连文件字节都一致。",
+          "en": "attestation.json separates an envelope from a core. core is the protected body: claim, variants, corpus counts, matrix digest, per-variant results, bound and verdict; core_sha256 is the sha256 of its canonical JSON. auxiliary explains how this run happened — creation time, invocation arguments, optional adjudication samples — and never enters the hash. The timestamp honours SOURCE_DATE_EPOCH, so two runs can match byte for byte."
+        },
+        "code": "schema            absentia.attestation/1\ncreated_at        2026-11-06T00:47:16Z      (envelope, not hashed)\ncore.claim        text · normalized\ncore.variants[]   text · source · rationale\ncore.corpus       docs 7 · pages 7 · parsed_pages 7 · chunks 21\n                  manifest_sha256 b59e497de998c0501208749c2e812712b86d59c8bf0ac4d5a4d972608fcff09e\ncore.matrix       chunks 21 · variants 4 · comparisons 84\n                  sha256 77ddaf88786a4824d6631ce139943115b8ac63504b6c9c0061f435df381b8181\ncore.bound        tau 0.62 · calibration_recall 0.86 · lexical_only true\ncore.verdict      INCONCLUSIVE · lexical_only · top1_score 0.251183\ncore_sha256       181e3e900d0c60115f96d4d995d94e27b849183dd3216836bb48a4590eb58343\nauxiliary         invocation · adjudication"
+      },
+      {
+        "title": {
+          "zh": "四条命令，四种退出状态",
+          "en": "Four commands, four exit states"
+        },
+        "body": {
+          "zh": "index 全量重建清单与索引，打印页数、段数与解析失败清单。check 生成改写、跑 N×M 打分、写 attestation.json 与 ledger.md。verify 复算并逐字段比对。mcp 起 stdio server，暴露 absence_check 与 absence_verify。--tau 会同时改变判定与凭证里的 bound；--json 打印完整凭证，便于接进别的流程。",
+          "en": "index rebuilds the manifest and index in full and prints page counts, chunk counts and the parse-failure list. check generates variants, runs the N×M scoring and writes attestation.json plus ledger.md. verify recomputes and compares field by field. mcp starts the stdio server exposing absence_check and absence_verify. --tau changes both the verdict and the bound recorded in the attestation; --json prints the whole attestation for another pipeline to consume."
+        },
+        "code": "absentia index ARCHIVE [--out DIR]\nabsentia check CLAIM --archive DIR [--out DIR] [--tau T]\n                [--endpoint URL] [--embed-model NAME]\n                [--model NAME] [--adjudicate] [--json]\nabsentia verify ATTESTATION [--archive DIR] [--tau T]\n                 [--endpoint URL] [--embed-model NAME] [--json]\nabsentia mcp [--archive DIR]"
+      },
+      {
+        "title": {
+          "zh": "判定表只认两个数",
+          "en": "The decision table reads two numbers"
+        },
+        "body": {
+          "zh": "没有可打分的分段，或没有已解析页 → INCONCLUSIVE（empty_corpus）。最高分 ≥ τ → PRESENT（score_at_or_above_tau）。最高分 < τ 且只跑了词法通道 → INCONCLUSIVE（lexical_only）。最高分 < τ 且语义通道覆盖全部分段 → ABSENT_BOUNDED（all_scores_below_tau）。第三行是产品的自我约束，不是降级故障：没有嵌入端点时，别的写法没被覆盖，工具拒绝把字面缺席说成缺席。",
+          "en": "No scoreable chunk, or no parsed page → INCONCLUSIVE (empty_corpus). Top score at or above τ → PRESENT (score_at_or_above_tau). Top score below τ with the lexical channel only → INCONCLUSIVE (lexical_only). Top score below τ with the semantic channel covering every chunk → ABSENT_BOUNDED (all_scores_below_tau). The third row is a self-imposed constraint rather than a degraded failure: without an embedding endpoint the other phrasings were never covered, so the tool refuses to call a literal miss an absence."
+        },
+        "code": "score >= tau                        PRESENT         score_at_or_above_tau\nscore <  tau  and  lexical_only     INCONCLUSIVE    lexical_only\nscore <  tau  and  semantic covers   ABSENT_BOUNDED  all_scores_below_tau\nno chunks or no parsed pages        INCONCLUSIVE    empty_corpus"
+      },
+      {
+        "title": {
+          "zh": "录制机没有嵌入端点，这不是失败",
+          "en": "The recording host had no endpoint, and that is not a failure"
+        },
+        "body": {
+          "zh": "docs/demo-results.json 里缺席命题的判定是 INCONCLUSIVE（lexical_only），不是 ABSENT_BOUNDED。ABSENT_BOUNDED 的路径由测试套件用替身嵌入器覆盖，不在这次录制里；在本机接好 bge-m3 之后，同一条命令会真正走完语义通道。另外，凭证里的 calibration_recall 是随包发布的固定表（τ=0.62 对应 0.86），它说明阈值意味着什么，不是对这次档案测出来的召回率——私有档案没有标注查询集。",
+          "en": "In docs/demo-results.json the absence claim is INCONCLUSIVE (lexical_only), not ABSENT_BOUNDED. The ABSENT_BOUNDED path is covered by the test suite with a stand-in embedder, not by this recording; with bge-m3 behind a local endpoint, the same command exercises the semantic channel end to end. Note also that calibration_recall in the attestation is a fixed table shipped with the package (τ=0.62 maps to 0.86). It says what the threshold means, not what recall was measured on this archive — a private archive has no labelled query set."
+        }
+      },
+      {
+        "title": {
+          "zh": "MCP：把 check 与 verify 接到本机客户端",
+          "en": "MCP: attach check and verify to a local client"
+        },
+        "body": {
+          "zh": "absentia mcp 起一个 stdio server，用换行分隔的 JSON-RPC 2.0 直接实现，没有第三方 SDK 依赖。stdout 只走协议帧，诊断全部去 stderr。absence_check 返回凭证与路径，absence_verify 返回复算报告。--archive 给服务端一个默认档案，调用时也可以逐次覆盖。",
+          "en": "absentia mcp starts a stdio server implemented directly on newline-delimited JSON-RPC 2.0, with no third-party SDK dependency. stdout carries protocol frames only; every diagnostic goes to stderr. absence_check returns the attestation and its path, absence_verify returns the recomputation report. --archive gives the server a default archive, which individual calls can override."
+        },
+        "code": "{\n  \"mcpServers\": {\n    \"absentia\": {\n      \"command\": \"absentia\",\n      \"args\": [\"mcp\", \"--archive\", \"/path/to/archive\"]\n    }\n  }\n}"
+      }
+    ]
+  },
+  "limitations": [
+    {
+      "zh": "不做 OCR。v0.1 只处理有文字层的 PDF、DOCX、TXT、MD；扫描件以 no_text_layer 进入 excluded 台账，页数计入「未复习」，不计入 parsed_pages。",
+      "en": "No OCR. v0.1 handles text-layer PDF, DOCX, TXT and MD only; a scanned document enters the excluded ledger with reason no_text_layer, and its pages count as unread rather than parsed_pages."
+    },
+    {
+      "zh": "不支持增量索引。每次 check 全量重建清单与索引，这是可复算的代价，也是刻意的选择；档案很大时运行时间会随之增长。",
+      "en": "No incremental indexing. Every check rebuilds the manifest and index in full — the price of recomputability, and a deliberate one; runtime grows with archive size."
+    },
+    {
+      "zh": "口径词典只覆盖中文的三类改写：简繁、全称/简称/别称、公文套话与同义动词。方言与外语不在 v0.1 范围内；词法通道的两字词回退会记录为 like_fallback。",
+      "en": "The variant dictionary covers three Chinese rewrite families only: simplified/traditional, full/short/alias names, and formulaic phrasing with synonyms. Dialects and other languages are out of scope for v0.1; two-character lexical terms are recorded as like_fallback."
+    },
+    {
+      "zh": "calibration_recall 是随包发布的固定表，不是对本次语料的测量。私有档案没有标注查询集，这一点无法回避；凭证写它是为了说明 τ 的含义。",
+      "en": "calibration_recall is a fixed table shipped with the package, not a measurement on this corpus. A private archive has no labelled query set, and that cannot be engineered away; it is recorded so the reader knows what τ means."
+    },
+    {
+      "zh": "演示档案只有 7 份文档、7 页、21 段，是代码路径的夹具，不是基准语料。仓库里没有更大档案的基准数据，网站上的任何计数都不应被读成性能声明。",
+      "en": "The demo archive is 7 documents, 7 pages and 21 chunks: a fixture for the code path, not a benchmark corpus. The repository has no benchmark data for larger archives, and no count on this site should be read as a performance claim."
+    },
+    {
+      "zh": "ABSENT_BOUNDED 未在录制中触发。那条路径由测试套件用替身嵌入器覆盖；录制机没有本地嵌入端点，所以实际结论是 INCONCLUSIVE（lexical_only）。",
+      "en": "ABSENT_BOUNDED does not occur in the recording. That path is covered by the test suite with a stand-in embedder; the recording host had no local embedding endpoint, so the actual verdict is INCONCLUSIVE (lexical_only)."
+    },
+    {
+      "zh": "语义通道的可复算性依赖本机模型与端点本身确定。换一个量化版本会改变 matrix.sha256；凭证把这个差异暴露出来，而不是假装一致。纯 Python 点积，v0.1 不引入 numpy。",
+      "en": "Semantic-channel recomputability depends on the local model and endpoint being deterministic. A different quantisation changes matrix.sha256; the attestation exposes that difference instead of pretending agreement. Dot products are pure Python — v0.1 does not pull in numpy."
+    },
+    {
+      "zh": "verify 默认只自动连接 localhost、127.0.0.1、::1 形式的嵌入端点。凭证记录的是远程地址时，必须人工显式传 --endpoint，避免把档案内容发往未知主机。",
+      "en": "verify only auto-connects to embedding endpoints on localhost, 127.0.0.1 or ::1. When the attestation records a remote address, you must pass --endpoint explicitly, so archive content is not sent to an unknown host."
+    },
+    {
+      "zh": "审计底稿 xlsx、签章页导出与批量并发是 v0.2 的付费层，v0.1 尚未实现，也不收款。v0.1 的全部命令以 MIT 开源，免费使用。",
+      "en": "The audit-workpaper xlsx, signature-page export and batch concurrency are the paid v0.2 layer; v0.1 does not implement them and does not charge. Every v0.1 command is MIT-licensed and free to use."
+    }
+  ],
+  "cta": {
+    "headline": {
+      "zh": "下一次要说「没有」，带上一份凭证。",
+      "en": "Next time you say no, bring the record."
+    },
+    "sub": {
+      "zh": "先在仓库自带的 7 份档案上跑一遍，再把同一条命令指向你自己的目录。",
+      "en": "Run it once on the seven documents in the repo, then point the same command at your own archive."
+    },
+    "button": {
+      "zh": "在 GitHub 查看源码",
+      "en": "Read the source on GitHub"
+    }
+  },
+  "footer": {
+    "tag": {
+      "zh": "本地档案查证，MIT 开源。凭证格式与复算规则随仓库发布。",
+      "en": "Local archive verification, MIT-licensed. The attestation format and recompute rules ship with the repo."
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "mode": "auto",
+  "id": "56e6a0-6ae0e7-acf6b7-06c405acba43",
+  "identity": "https://github.com/supermarioyl/absentia-attest",
+  "primary": "#56e6a0",
+  "secondary": "#6ae0e7",
+  "highlight": "#acf6b7",
+  "dark": {
+    "bg": "#050c0f",
+    "panel": "#0c171b",
+    "code": "#0a1718",
+    "ink": "#eefdf1",
+    "muted": "#95b9b6",
+    "line": "#173c2f",
+    "primary": "#56e6a0",
+    "secondary": "#6ae0e7",
+    "highlight": "#acf6b7",
+    "accent": "#56e6a0",
+    "buttonStart": "#32855d",
+    "buttonEnd": "#3d8085",
+    "buttonText": "#ffffff"
+  },
+  "light": {
+    "bg": "#f9fefc",
+    "panel": "#f7fefa",
+    "code": "#f3fdf8",
+    "ink": "#132a26",
+    "muted": "#557a7a",
+    "line": "#cbf7e2",
+    "primary": "#31825b",
+    "secondary": "#3b7e81",
+    "highlight": "#577c5d",
+    "accent": "#31825b",
+    "buttonStart": "#32855d",
+    "buttonEnd": "#3d8085",
+    "buttonText": "#ffffff"
+  }
+}

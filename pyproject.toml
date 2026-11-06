@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "absentia-attest"
+version = "0.1.0"
+description = "本地档案查证工具：为否定结论出具带覆盖度的缺席凭证"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "SuperMarioYL" }]
+keywords = ["absence", "attestation", "audit", "rag", "mcp", "chinese"]
+classifiers = [
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Environment :: Console",
+  "Topic :: Text Processing :: Indexing",
+]
+dependencies = [
+  "typer>=0.12",
+  "pypdf>=5.0",
+  "cryptography>=43.0",
+  "python-docx>=1.1",
+  "httpx>=0.27",
+  "pytest>=8.3",
+]
+
+[project.scripts]
+absentia = "absentia.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/absentia"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

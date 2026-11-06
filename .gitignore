@@ -1,0 +1,28 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# local tool state
+.absentia/
+
+# editor / os
+.DS_Store
+
+# agent tooling config
+.claude/
+CLAUDE.md
+
+# build scratch
+PUBLISH_BLOCKED.md
+BUILD_SETUP_NEXT_STEPS.md
+_build_ctx.json
+.spawn.*
+.builder_*
+.build_metadata*
+.stage_*
